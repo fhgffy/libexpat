@@ -135,6 +135,44 @@ jobs:
         make install DESTDIR="${PWD}"/ROOT
         find ROOT | sort | xargs ls -ld
 
+    - name: Check repeated CMake package component requests
+      run: |
+        set -x
+        cd expat/expat-*.*.*/
+        mkdir component-check
+        cat > component-check/CMakeLists.txt <<'EOF'
+        cmake_minimum_required(VERSION 3.17)
+        project(expat_component_check NONE)
+
+        find_package(expat CONFIG REQUIRED COMPONENTS char dtd ns NO_DEFAULT_PATH)
+        if(CHECK_REQUIRED_FAILURE)
+            find_package(expat CONFIG REQUIRED COMPONENTS ushort NO_DEFAULT_PATH)
+            message(FATAL_ERROR "Unavailable required component was accepted")
+        endif()
+
+        foreach(component ushort wchar_t attr_info min_size unknown_component)
+            find_package(expat CONFIG QUIET COMPONENTS ${component} NO_DEFAULT_PATH)
+            if(expat_FOUND)
+                message(FATAL_ERROR "Unavailable required component ${component} was accepted")
+            endif()
+            find_package(expat CONFIG REQUIRED COMPONENTS char dtd ns NO_DEFAULT_PATH)
+            find_package(expat CONFIG REQUIRED OPTIONAL_COMPONENTS ${component} NO_DEFAULT_PATH)
+        endforeach()
+        EOF
+        for build_system in autotools cmake; do
+            package_dirs=("${PWD}/build_${build_system}/ROOT/usr/local/lib123/cmake/"expat-*)
+            cmake -S component-check -B "component-check/${build_system}" \
+                -Dexpat_DIR="${package_dirs[0]}"
+            if cmake -S component-check -B "component-check/${build_system}-required" \
+                -Dexpat_DIR="${package_dirs[0]}" -DCHECK_REQUIRED_FAILURE=ON \
+                > "component-check/${build_system}-required.log" 2>&1; then
+                cat "component-check/${build_system}-required.log"
+                exit 1
+            fi
+            cat "component-check/${build_system}-required.log"
+            grep -q 'expat_FOUND to FALSE' "component-check/${build_system}-required.log"
+        done
+
     - name: Check for identical CMake files from both build systems
       run: |
         set -x
