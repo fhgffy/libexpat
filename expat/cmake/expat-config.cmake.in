@@ -71,6 +71,6 @@ endif()
 
 check_required_components(expat)
 
-unset(_expat_config_in_progress)
 
+    set(_expat_config_in_progress FALSE)
 endif(NOT _expat_config_in_progress)
